@@ -1,14 +1,16 @@
 from __future__ import annotations
 
-import io
-import sys
-import traceback
+import os
 import re
-import inspect
+import subprocess
+import sys
+import tempfile
+
+from src.config import Config
 
 
 class TesterAgent:
-    """Tester Agent：执行代码并自动验证已定义的函数"""
+    """Tester Agent：子进程沙箱执行代码 + LLM 驱动测试用例生成"""
 
     @staticmethod
     def _find_functions(code: str) -> list[str]:
@@ -16,111 +18,111 @@ class TesterAgent:
         return pattern.findall(code)
 
     @staticmethod
-    def _build_test_for(func_name: str, func: object, req: str) -> str:
-        try:
-            sig = inspect.signature(func)
-            params = list(sig.parameters.keys())
-            param_count = len(params)
-        except (ValueError, TypeError):
-            params = []
-            param_count = 0
+    def _generate_tests_via_llm(code: str, user_request: str) -> str:
+        from src.llm_client import call_llm
 
-        req_lower = req.lower()
+        prompt = (
+            "你是一个 Python 测试专家。下面是用户的需求和一段 Python 代码。\n"
+            "请写一行 print() 语句来测试这段代码的核心函数。\n"
+            "只输出一行 print 语句，不要任何解释、markdown 或额外代码。\n"
+            "\n"
+            f"用户需求: {user_request}\n"
+            f"代码:\n```python\n{code}\n```\n"
+        )
+        response = call_llm(prompt)
+        if not response:
+            return ""
 
-        if param_count == 0:
-            return f"print(repr({func_name}()))"
-
-        if param_count == 1:
-            if any(kw in req_lower for kw in ("质数", "prime")):
-                return (
-                    f"print(f'{func_name}(7)={{{func_name}(7)}}, "
-                    f"{func_name}(10)={{{func_name}(10)}}')"
-                )
-            if any(kw in req_lower for kw in ("排序", "sort")):
-                return f"print(repr({func_name}([3, 1, 2])))"
-            if any(kw in req_lower for kw in ("反转", "reverse")):
-                return f"print(repr({func_name}('hello')))"
-            if any(kw in req_lower for kw in ("去重", "dup", "dedup")):
-                return f"print(repr({func_name}([1, 2, 2, 3])))"
-            if any(kw in req_lower for kw in ("斐波", "fib")):
-                return f"print(f'{func_name}(10)={{{func_name}(10)}}')"
-            if any(kw in req_lower for kw in ("阶乘", "factorial", "fact")):
-                return f"print(f'{func_name}(5)={{{func_name}(5)}}')"
-            return f"print(repr({func_name}(42)))"
-
-        if param_count == 2:
-            return (
-                f"print(f'{func_name}(2, 3)="
-                f"{{{func_name}(2, 3)}}')"
-            )
-
-        args = ", ".join(f"'{p}'" for p in params[:3])
-        return f"print(repr({func_name}({args})))"
+        clean = (
+            response.strip()
+            .replace("```python", "")
+            .replace("```", "")
+            .strip()
+        )
+        for prefix in ("print(", "print ("):
+            idx = clean.find(prefix)
+            if idx != -1:
+                return clean[idx:].strip()
+        return clean
 
     @staticmethod
-    def execute(code: str, user_request: str = "") -> tuple[bool, str]:
-        old_stdout = sys.stdout
-        captured = io.StringIO()
-
+    def execute(
+        code: str, user_request: str = ""
+    ) -> tuple[bool, str]:
+        tmp_dir = None
         try:
-            sys.stdout = captured
-            compiled = compile(code, "<generated>", "exec")
-            namespace: dict = {}
-            exec(compiled, {"__builtins__": __builtins__}, namespace)
-            output = captured.getvalue()
+            tmp_dir = tempfile.mkdtemp(prefix="cc_tester_")
+            code_path = os.path.join(tmp_dir, "code.py")
+
+            with open(code_path, "w", encoding="utf-8") as f:
+                f.write(code)
+
+            proc = subprocess.run(
+                [sys.executable, code_path],
+                capture_output=True,
+                text=True,
+                timeout=Config.SANDBOX_TIMEOUT,
+                cwd=tmp_dir,
+            )
+
+            if proc.returncode != 0:
+                stderr = proc.stderr.strip()
+                if stderr:
+                    lines = stderr.split("\n")
+                    short = "\n".join(lines[-6:])
+                    return False, f"[stderr]\n{short}"
+                return False, f"退出码 {proc.returncode}"
+
+            stdout = proc.stdout.strip()
+            summary: list[str] = []
+            if stdout:
+                summary.append(f"[stdout]\n{stdout}")
 
             funcs = TesterAgent._find_functions(code)
 
-            summary: list[str] = []
-            if output.strip():
-                summary.append(f"[stdout] {output.strip()}")
-
             if funcs:
-                summary.append("[auto-test] 检测到函数，执行测试用例：")
-                for name in funcs:
-                    func = namespace.get(name)
-                    if not callable(func):
-                        continue
-
-                    test_expr = TesterAgent._build_test_for(
-                        name, func, user_request
+                test_expr = TesterAgent._generate_tests_via_llm(
+                    code, user_request
+                )
+                if test_expr:
+                    test_code = (
+                        f"import sys; sys.path.insert(0, '.')\n"
+                        f"from code import *\n"
+                        f"{test_expr}\n"
                     )
+                    test_path = os.path.join(tmp_dir, "_test.py")
+                    with open(test_path, "w", encoding="utf-8") as f:
+                        f.write(test_code)
 
-                    capture2 = io.StringIO()
-                    old_stdout2 = sys.stdout
-                    try:
-                        sys.stdout = capture2
-                        test_env = dict(namespace)
-                        test_env["__builtins__"] = __builtins__
-                        exec(test_expr, test_env)
-                        test_out = capture2.getvalue().strip()
-                    except Exception as e:
-                        test_out = f"[error] {e}"
-                    finally:
-                        sys.stdout = old_stdout2
-                        capture2.close()
-
-                    try:
-                        sig_str = str(inspect.signature(func))
-                    except (ValueError, TypeError):
-                        sig_str = "(*)"
-
+                    proc2 = subprocess.run(
+                        [sys.executable, test_path],
+                        capture_output=True,
+                        text=True,
+                        timeout=Config.SANDBOX_TIMEOUT,
+                        cwd=tmp_dir,
+                    )
+                    test_out = (
+                        proc2.stdout.strip()
+                        if proc2.returncode == 0
+                        else f"[error] {proc2.stderr.strip().split(chr(10))[-1]}"
+                    )
                     summary.append(
-                        f"  {name}{sig_str}: "
-                        f"{test_expr} → {test_out}"
+                        f"[auto-test] {test_expr} → {test_out}"
                     )
 
-                return True, "\n".join(summary)
+                return True, "\n".join(summary) if summary else "执行成功（无输出）"
 
-            result = (
-                output.strip()
-                if output.strip()
-                else "执行成功（无输出，且未检测到函数定义）"
-            )
-            return True, result
-        except Exception:
-            tb = traceback.format_exc()
-            return False, tb
+            return True, stdout if stdout else "执行成功（无输出，且未检测到函数定义）"
+
+        except subprocess.TimeoutExpired:
+            return False, f"执行超时（>{Config.SANDBOX_TIMEOUT}s）"
+        except Exception as e:
+            return False, str(e)
         finally:
-            sys.stdout = old_stdout
-            captured.close()
+            if tmp_dir and os.path.isdir(tmp_dir):
+                import shutil
+
+                try:
+                    shutil.rmtree(tmp_dir, ignore_errors=True)
+                except Exception:
+                    pass
