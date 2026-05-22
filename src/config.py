@@ -21,6 +21,7 @@ class Config:
         os.getenv("RETRY_BACKOFF_FACTOR", "1.5")
     )
     SANDBOX_TIMEOUT: int = int(os.getenv("SANDBOX_TIMEOUT", "10"))
+    MAX_HISTORY_TOKENS: int = int(os.getenv("MAX_HISTORY_TOKENS", "96000"))
 
     @classmethod
     def validate(cls) -> bool:

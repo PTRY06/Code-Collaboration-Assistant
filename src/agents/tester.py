@@ -43,7 +43,45 @@ class TesterAgent:
             idx = clean.find(prefix)
             if idx != -1:
                 return clean[idx:].strip()
-        return clean
+        return ""
+
+    @staticmethod
+    def _generate_tests_fallback(code: str) -> str:
+        """LLM 不可用时的规则兜底：根据函数签名生成简单测试"""
+        import inspect
+        import io as _io
+
+        old_out = sys.stdout
+        namespace: dict = {}
+        try:
+            sys.stdout = _io.StringIO()
+            compiled = compile(code, "<fallback>", "exec")
+            exec(compiled, {"__builtins__": __builtins__}, namespace)
+        except Exception:
+            return ""
+        finally:
+            sys.stdout = old_out
+
+        funcs = TesterAgent._find_functions(code)
+        for name in funcs:
+            func = namespace.get(name)
+            if not callable(func):
+                continue
+            try:
+                sig = inspect.signature(func)
+                n = len(sig.parameters)
+            except (ValueError, TypeError):
+                n = 0
+
+            if n == 0:
+                return f"print(repr({name}()))"
+            if n == 1:
+                return f"print(repr({name}(42)))"
+            if n == 2:
+                return f"print(repr({name}(1, 2)))"
+            return f"print(repr({name}()))"
+
+        return ""
 
     @staticmethod
     def execute(
@@ -84,6 +122,8 @@ class TesterAgent:
                 test_expr = TesterAgent._generate_tests_via_llm(
                     code, user_request
                 )
+                if not test_expr:
+                    test_expr = TesterAgent._generate_tests_fallback(code)
                 if test_expr:
                     test_code = (
                         f"import sys; sys.path.insert(0, '.')\n"

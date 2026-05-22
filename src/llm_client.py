@@ -49,14 +49,6 @@ def _retry_request(
     for attempt in range(Config.MAX_RETRIES + 1):
         try:
             resp = method()
-            if resp.status_code < 500 or attempt == Config.MAX_RETRIES:
-                return resp
-            if resp.status_code in RETRYABLE_STATUS:
-                raise requests.exceptions.HTTPError(
-                    f"{resp.status_code} {resp.reason}",
-                    response=resp,
-                )
-            return resp
         except RETRYABLE_EXCEPTIONS as e:
             last_exc = e
             if attempt < Config.MAX_RETRIES:
@@ -67,6 +59,24 @@ def _retry_request(
                     file=sys.stderr,
                 )
                 time.sleep(delay)
+                continue
+            raise
+
+        if (
+            resp.status_code in RETRYABLE_STATUS
+            and attempt < Config.MAX_RETRIES
+        ):
+            delay = Config.RETRY_BACKOFF_FACTOR ** attempt
+            print(
+                f"[LLM] 状态码 {resp.status_code} "
+                f"(尝试 {attempt + 1}/{Config.MAX_RETRIES + 1})，"
+                f"{delay:.1f}s 后重试...",
+                file=sys.stderr,
+            )
+            time.sleep(delay)
+            continue
+
+        return resp
 
     raise last_exc  # type: ignore[misc]
 

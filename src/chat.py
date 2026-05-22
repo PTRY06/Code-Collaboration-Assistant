@@ -32,13 +32,18 @@ class ChatMessage:
 
 
 class ChatSession:
-    """管理多轮对话历史"""
+    """管理多轮对话历史，自动裁剪超出上下文窗口的消息"""
+
+    MAX_TOKENS = 96000
 
     def __init__(self) -> None:
         self.messages: list[ChatMessage] = [
             ChatMessage(role="system", content=SYSTEM_PROMPT),
         ]
         self.last_code_blocks: list[str] = []
+        self._trimmed_count: int = 0
+
+    # ── 消息操作 ──────────────────────────────
 
     def add_user(self, content: str) -> None:
         self.messages.append(ChatMessage(role="user", content=content))
@@ -49,19 +54,63 @@ class ChatSession:
     def add_system(self, content: str) -> None:
         self.messages.append(ChatMessage(role="system", content=content))
 
+    # ── Token 估算与裁剪 ──────────────────────
+
+    @staticmethod
+    def _estimate_tokens(text: str) -> int:
+        return max(1, len(text) // 3)
+
+    def _total_tokens(self) -> int:
+        return sum(self._estimate_tokens(m.content) for m in self.messages)
+
+    def _trim(self) -> None:
+        """裁剪最旧的非系统消息，直到总 token 数低于上限。
+        始终保留系统提示词和最近两轮对话。
+        """
+        min_keep = 5  # system + 2 turns (user+assistant × 2)
+        while len(self.messages) > min_keep and self._total_tokens() > self.MAX_TOKENS:
+            idx = 1  # 跳过 system prompt
+            # 找到最早的非系统消息
+            while idx < len(self.messages) and self.messages[idx].role == "system":
+                idx += 1
+            if idx >= len(self.messages) - 4:
+                break
+            removed = self.messages.pop(idx)
+            self._trimmed_count += 1
+            if self._trimmed_count == 1:
+                self.messages.insert(
+                    1,
+                    ChatMessage(
+                        role="system",
+                        content="[较早的对话已自动省略以节省上下文]",
+                    ),
+                )
+
     def to_api_messages(self) -> list[dict]:
+        self._trim()
         return [m.to_api() for m in self.messages]
+
+    # ── 其他 ─────────────────────────────────
 
     def history_summary(self) -> str:
         lines = []
         for m in self.messages:
             if m.role == "system" and "你是 CodeCollab" in m.content:
-                continue  # skip system prompt in summary
-            role_label = {"user": "你", "assistant": "CodeCollab", "system": "[系统]"}.get(m.role, m.role)
+                continue
+            role_label = {
+                "user": "你",
+                "assistant": "CodeCollab",
+                "system": "[系统]",
+            }.get(m.role, m.role)
             preview = m.content[:80].replace("\n", " ")
             lines.append(f"  {role_label}: {preview}")
+        total = self._total_tokens()
+        lines.append(
+            f"  ── 估算 token: {total} / {self.MAX_TOKENS}"
+        )
         return "\n".join(lines) if lines else "（空对话）"
 
     def clear(self) -> None:
         self.messages = [ChatMessage(role="system", content=SYSTEM_PROMPT)]
         self.last_code_blocks = []
+        self._trimmed_count = 0
