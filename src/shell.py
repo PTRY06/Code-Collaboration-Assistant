@@ -74,8 +74,22 @@ class Shell:
         name = args[0].strip()
         if name not in AVAILABLE_MODELS:
             return f"未知模型 '{name}'。可用: {', '.join(AVAILABLE_MODELS)}"
+
+        print(f"正在验证模型 '{name}' ...", end="", flush=True)
+        prev = Config.DEEPSEEK_MODEL
         Config.DEEPSEEK_MODEL = name
-        return f"已切换模型为: {name}"
+        try:
+            from src.llm_client import call_llm
+            resp = call_llm("ping")
+            if resp:
+                print(" OK")
+                return f"已切换模型为: {name}"
+            else:
+                Config.DEEPSEEK_MODEL = prev
+                return f"模型 '{name}' 无响应，已回退到 {prev}"
+        except Exception:
+            Config.DEEPSEEK_MODEL = prev
+            return f"模型 '{name}' 不可达，已回退到 {prev}"
 
     def _cmd_config(self) -> str:
         return (
@@ -197,83 +211,22 @@ class Shell:
     # ── 对话核心逻辑 ──────────────────────────────────────
 
     def _conversation_turn(self, user_input: str) -> None:
-        from src.agents.writer import WriterAgent
-        from src.agents.tester import TesterAgent
+        from src.orchestrator import run_writer_tester
 
         def on_token(t: str) -> None:
             sys.stdout.write(t)
             sys.stdout.flush()
 
-        print()
+        def on_status(msg: str) -> None:
+            print(msg)
 
-        # 1. 获取助手回复（流式）
-        response = WriterAgent.chat(
-            self.chat, user_input, on_token=on_token
+        print()
+        success, blocks, _ = run_writer_tester(
+            user_input,
+            chat=self.chat,
+            on_token=on_token,
+            on_status=on_status,
         )
+        if success and not blocks:
+            pass  # 纯对话，无事可做
         print()
-
-        if not response:
-            print("[ERROR] 未能获取回复。")
-            return
-
-        code_blocks = self.chat.last_code_blocks
-        if not code_blocks:
-            return
-
-        # 2. 提取并测试代码块
-        print()
-        self._test_and_fix_loop(code_blocks, user_input, on_token)
-
-        print()
-
-    def _test_and_fix_loop(
-        self,
-        code_blocks: list[str],
-        user_input: str,
-        on_token,
-    ) -> None:
-        from src.agents.writer import WriterAgent
-        from src.agents.tester import TesterAgent
-
-        for idx, code in enumerate(code_blocks, 1):
-            if len(code_blocks) > 1:
-                print(f"--- 代码块 {idx}/{len(code_blocks)} ---")
-
-            for attempt in range(Config.MAX_ITERATIONS):
-                label = "执行" if attempt == 0 else f"修正第{attempt}次"
-                print(f"\n[Tester] {label}...")
-
-                success, msg = TesterAgent.execute(
-                    code, user_request=user_input
-                )
-
-                if success:
-                    print(f"[OK] 测试通过！")
-                    print(msg)
-
-                    if len(code_blocks) == 1:
-                        WriterAgent.comment_on_result(
-                            self.chat, msg, on_token=on_token
-                        )
-                        print()
-                    return
-
-                print(f"[FAIL] {msg}")
-
-                if attempt < Config.MAX_ITERATIONS - 1:
-                    print("\n[Writer] 正在修正...\n")
-                    response = WriterAgent.retry_with_error(
-                        self.chat, code, msg, on_token=on_token
-                    )
-                    print()
-
-                    new_blocks = self.chat.last_code_blocks
-                    if new_blocks:
-                        code = new_blocks[-1]
-                    else:
-                        break
-                else:
-                    print(
-                        f"\n[STOP] 已达最大修正轮数"
-                        f" ({Config.MAX_ITERATIONS})，放弃此代码块。"
-                    )
