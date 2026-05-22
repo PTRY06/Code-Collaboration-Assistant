@@ -8,13 +8,14 @@ A dual-agent coding assistant with a Writer-Tester feedback loop — generates c
 
 ## ✨ Features · 功能
 
-- **Conversational AI** — Friendly, natural dialogue. Explains approach before writing code.
-- **Streaming Output** — Tokens appear in real-time, like a chat.
-- **Auto Code Extraction** — Detects ` ```python ``` ` blocks and executes them automatically.
-- **Auto-Fix Loop** — On failure, Tester feeds errors back to Writer for automatic correction (up to N rounds).
-- **Multi-Turn Memory** — Full conversation history preserved across turns.
-- **Slash Commands** — `/model`, `/config`, `/history`, `/save`, `/exit`, etc.
-- **Batch Testing** — Run multiple requests from a file, get pass/fail stats.
+- **Conversational AI · 对话式 AI** — Friendly, natural dialogue. Explains approach before writing code. 在写代码前先解释思路，像朋友一样自然对话。
+- **Streaming Output · 流式输出** — Tokens appear in real-time, like a chat. 逐字实时显示，如打字机效果。
+- **Auto Code Extraction · 自动代码提取** — Detects ` ```python ``` ` blocks and executes them automatically. 自动识别代码块并执行。
+- **Auto-Fix Loop · 自动修正闭环** — On failure, Tester feeds errors back to Writer for automatic correction (up to N rounds). 代码出错时自动反馈给 Writer 修正，最多 N 轮。
+- **Multi-Turn Memory · 多轮对话记忆** — Full conversation history preserved across turns, with auto-trimming when approaching context limits. 完整保留对话上下文，超出限制时自动裁剪旧消息。
+- **Sandbox Execution · 沙箱执行** — Code runs in an isolated subprocess with a configurable timeout. 代码在隔离子进程中执行，支持超时限制。
+- **Slash Commands · 斜杠指令** — `/model`, `/config`, `/history`, `/save`, `/exit` and more. 支持 `/model`、`/config` 等交互指令。
+- **Batch Testing · 批量测试** — Run multiple requests from a file, get pass/fail stats. 从文件批量读取需求，输出通过率统计。
 
 ---
 
@@ -31,58 +32,64 @@ pip install -r requirements.txt
 ### 2. Configure · 配置
 
 ```bash
-# Copy the template
+# Copy the template · 复制模板
 copy .env.example .env        # Windows
 cp .env.example .env          # macOS/Linux
 ```
 
-Edit `.env` and fill in your credentials. **Defaults point to DeepSeek — swap to any OpenAI-compatible provider:**
+Edit `.env` and fill in your credentials. 编辑 `.env` 填入你的 API 凭证。
+
+**Defaults point to DeepSeek — swap to any OpenAI-compatible provider. 默认使用 DeepSeek，可替换为任意 OpenAI 兼容服务：**
 
 ```env
-# --- DeepSeek (default) ---
+# --- DeepSeek (default · 默认) ---
 DEEPSEEK_API_KEY=sk-your-key-here
 DEEPSEEK_BASE_URL=https://api.deepseek.com/chat/completions
 DEEPSEEK_MODEL=deepseek-v4-pro
 
-# --- Alternative: OpenAI ---
+# --- Alternative: OpenAI · 替代：OpenAI ---
 # DEEPSEEK_API_KEY=sk-your-openai-key
 # DEEPSEEK_BASE_URL=https://api.openai.com/v1/chat/completions
 # DEEPSEEK_MODEL=gpt-4o
 
-# --- Alternative: local Ollama ---
+# --- Alternative: local Ollama · 替代：本地 Ollama ---
 # DEEPSEEK_API_KEY=ollama
 # DEEPSEEK_BASE_URL=http://localhost:11434/v1/chat/completions
 # DEEPSEEK_MODEL=codellama
 
+# Tuning · 调参
 MAX_ITERATIONS=3
+MAX_RETRIES=3
+SANDBOX_TIMEOUT=10
+MAX_HISTORY_TOKENS=96000
 ```
 
-Despite the `DEEPSEEK_` prefix, the client follows the standard OpenAI chat completions format — any compatible endpoint works.
+Despite the `DEEPSEEK_` prefix, the client follows the standard OpenAI chat completions format — any compatible endpoint works. 变量名虽含 `DEEPSEEK_`，但客户端遵循标准 OpenAI 格式，任何兼容端点均可使用。
 
 ### 3. Run · 运行
 
 ```bash
-python -m src.main                  # Interactive mode
+python -m src.main                  # Interactive mode · 交互模式
 python -m src.main -r "write a prime checker"
 python -m src.main -r "写一个判断质数的函数" -q
-python -m src.main -b requests.txt  # Batch mode
+python -m src.main -b requests.txt  # Batch mode · 批量模式
 ```
 
 ---
 
 ## ⌨️ Slash Commands · 斜杠指令
 
-| Command | Description |
-|---------|-------------|
-| `/exit`, `/q` | Exit program |
-| `/model <name>` | Switch model |
-| `/models` | List available models |
-| `/config` | Show current configuration |
-| `/history` | Show conversation history |
-| `/clear` | Reset conversation |
-| `/save <path>` | Save last generated code to file |
-| `/iterations <n>` | Set max fix rounds (1-10) |
-| `/help`, `/?` | Show help |
+| Command · 指令 | Description · 说明 |
+|----------------|-------------------|
+| `/exit`, `/q` | Exit program · 退出程序 |
+| `/model <name>` | Switch model · 切换模型 |
+| `/models` | List available models · 列出可用模型 |
+| `/config` | Show current configuration · 显示当前配置 |
+| `/history` | Show conversation history · 显示对话历史 |
+| `/clear` | Reset conversation · 重置对话 |
+| `/save <path>` | Save last generated code to file · 保存最后生成的代码 |
+| `/iterations <n>` | Set max fix rounds (1-10) · 设置最大修正轮数 |
+| `/help`, `/?` | Show help · 显示帮助 |
 
 ---
 
@@ -90,53 +97,57 @@ python -m src.main -b requests.txt  # Batch mode
 
 ```
 src/
-├── main.py            # Entry point & CLI
-├── shell.py           # Interactive REPL & slash commands
-├── chat.py            # Conversation session & system prompt
-├── config.py          # Configuration (reads from .env)
-├── llm_client.py      # OpenAI-compatible API client (streaming)
-├── utils.py           # Code block extraction
+├── main.py            # Entry point & CLI · 入口与命令行
+├── shell.py           # Interactive REPL & slash commands · 交互式 Shell
+├── chat.py            # Conversation session & auto-trimming · 对话管理
+├── config.py          # Configuration (reads from .env) · 配置管理
+├── llm_client.py      # API client with retry & streaming · API 客户端
+├── utils.py           # Code block extraction · 代码块提取
 └── agents/
-    ├── writer.py      # Writer Agent — conversational code generation
-    └── tester.py      # Tester Agent — safe execution & auto-validation
+    ├── writer.py      # Writer Agent — conversational code gen · 对话生成
+    └── tester.py      # Tester Agent — sandbox execution · 沙箱执行
 ```
 
 ---
 
 ## ⚙️ Environment Variables · 环境变量
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DEEPSEEK_API_KEY` | — | **Required.** Your API key |
-| `DEEPSEEK_BASE_URL` | `https://api.deepseek.com/chat/completions` | Chat completions endpoint |
-| `DEEPSEEK_MODEL` | `deepseek-v4-pro` | Model name |
-| `MAX_ITERATIONS` | `3` | Max correction rounds per request |
+| Variable · 变量 | Default · 默认值 | Description · 说明 |
+|----------------|-----------------|-------------------|
+| `DEEPSEEK_API_KEY` | — | **Required.** Your API key · **必填。** API 密钥 |
+| `DEEPSEEK_BASE_URL` | `https://api.deepseek.com/chat/completions` | Chat completions endpoint · 聊天补全端点 |
+| `DEEPSEEK_MODEL` | `deepseek-v4-pro` | Model name · 模型名称 |
+| `MAX_ITERATIONS` | `3` | Max correction rounds · 最大修正轮数 |
+| `MAX_RETRIES` | `3` | API retry attempts on failure · API 失败重试次数 |
+| `RETRY_BACKOFF_FACTOR` | `1.5` | Exponential backoff multiplier · 指数退避因子 |
+| `SANDBOX_TIMEOUT` | `10` | Code execution timeout (seconds) · 代码执行超时（秒） |
+| `MAX_HISTORY_TOKENS` | `96000` | Auto-trim threshold for chat history · 对话历史自动裁剪阈值 |
 
-The variable names use `DEEPSEEK_` for historical reasons, but they accept any OpenAI-compatible API — just point `BASE_URL` and `MODEL` to your provider of choice.
+The variable names use `DEEPSEEK_` for historical reasons, but they accept any OpenAI-compatible API — just point `BASE_URL` and `MODEL` to your provider of choice. 变量名中 `DEEPSEEK_` 仅为历史遗留，可替换为任意 OpenAI 兼容 API。
 
 ---
 
 ## 🔌 Supported Backends · 支持的模型后端
 
-Any API that follows the OpenAI `/v1/chat/completions` format will work out of the box:
+Any API that follows the OpenAI `/v1/chat/completions` format will work out of the box. 任意兼容 OpenAI `/v1/chat/completions` 格式的 API 均可直接使用。
 
-| Provider | Example BASE_URL |
-|----------|-----------------|
+| Provider · 提供商 | Example BASE_URL · 示例端点 |
+|-------------------|---------------------------|
 | DeepSeek | `https://api.deepseek.com/chat/completions` |
 | OpenAI | `https://api.openai.com/v1/chat/completions` |
-| Ollama (local) | `http://localhost:11434/v1/chat/completions` |
+| Ollama (local · 本地) | `http://localhost:11434/v1/chat/completions` |
 | vLLM / TGI | `http://your-server:8000/v1/chat/completions` |
-| Any OpenAI-compatible proxy | Your custom URL |
+| Any OpenAI-compatible proxy · 任意兼容代理 | Your custom URL · 自定义地址 |
 
 ---
 
 ## 🛡️ Security · 安全
 
-- `.env` is gitignored — your API key stays local. `.env` 已被 `.gitignore` 排除，密钥不会上传。
-- Code execution uses an isolated namespace. This is a prototype — consider sandboxing for production. 代码执行使用隔离命名空间，原型验证可接受，生产环境建议更安全的沙箱方案。
+- `.env` is gitignored — your API key stays local and will never be committed. `.env` 已被 `.gitignore` 排除，密钥不会上传至仓库。
+- Code execution uses subprocess isolation with a configurable timeout. This is a prototype — consider Docker or further sandboxing for production deployments. 代码执行采用子进程隔离 + 可配置超时，原型验证可接受，生产环境建议 Docker 或更严格沙箱。
 
 ---
 
-## 📝 License
+## 📝 License · 许可证
 
-MIT License — open to use, modify, and share.
+MIT License — open to use, modify, and share. MIT 许可证——自由使用、修改和分发。
