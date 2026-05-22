@@ -1,8 +1,8 @@
 # Code Collaboration Assistant · 双智能体代码协作助手
 
-A dual-agent coding assistant that uses the Write↙Tester feedback loop to automatically generate, execute, and fix Python code powered by DeepSeek API.
+A dual-agent coding assistant with a Writer-Tester feedback loop — generates code from natural language, executes it, and auto-fixes errors. Supports any OpenAI-compatible API.
 
-一个基于 Writer-Tester 闭环反馈的双智能体代码协作助手，使用 DeepSeek API 驱动，自动生成、执行并修正 Python 代码。
+一个基于 Writer-Tester 闭环反馈的双智能体代码协作助手——用自然语言描述需求，自动生成代码、执行验证、修正错误。兼容任意 OpenAI 格式的 API。
 
 ---
 
@@ -28,18 +28,36 @@ cd Code-Collaboration-Assistant
 pip install -r requirements.txt
 ```
 
-### 2. Configure API Key · 配置密钥
+### 2. Configure · 配置
 
 ```bash
 # Copy the template
 copy .env.example .env        # Windows
 cp .env.example .env          # macOS/Linux
-
-# Edit .env and replace with your real key
-# DEEPSEEK_API_KEY=sk-xxxxxxxxxxxxxxxx
 ```
 
-Get a key at [platform.deepseek.com](https://platform.deepseek.com).
+Edit `.env` and fill in your credentials. **Defaults point to DeepSeek — swap to any OpenAI-compatible provider:**
+
+```env
+# --- DeepSeek (default) ---
+DEEPSEEK_API_KEY=sk-your-key-here
+DEEPSEEK_BASE_URL=https://api.deepseek.com/chat/completions
+DEEPSEEK_MODEL=deepseek-v4-pro
+
+# --- Alternative: OpenAI ---
+# DEEPSEEK_API_KEY=sk-your-openai-key
+# DEEPSEEK_BASE_URL=https://api.openai.com/v1/chat/completions
+# DEEPSEEK_MODEL=gpt-4o
+
+# --- Alternative: local Ollama ---
+# DEEPSEEK_API_KEY=ollama
+# DEEPSEEK_BASE_URL=http://localhost:11434/v1/chat/completions
+# DEEPSEEK_MODEL=codellama
+
+MAX_ITERATIONS=3
+```
+
+Despite the `DEEPSEEK_` prefix, the client follows the standard OpenAI chat completions format — any compatible endpoint works.
 
 ### 3. Run · 运行
 
@@ -57,7 +75,7 @@ python -m src.main -b requests.txt  # Batch mode
 | Command | Description |
 |---------|-------------|
 | `/exit`, `/q` | Exit program |
-| `/model <name>` | Switch model (`deepseek-v4-pro`, `deepseek-v4-flash`) |
+| `/model <name>` | Switch model |
 | `/models` | List available models |
 | `/config` | Show current configuration |
 | `/history` | Show conversation history |
@@ -73,10 +91,10 @@ python -m src.main -b requests.txt  # Batch mode
 ```
 src/
 ├── main.py            # Entry point & CLI
-├── shell.py           # Interactive REPL shell
+├── shell.py           # Interactive REPL & slash commands
 ├── chat.py            # Conversation session & system prompt
 ├── config.py          # Configuration (reads from .env)
-├── llm_client.py      # DeepSeek API client (streaming support)
+├── llm_client.py      # OpenAI-compatible API client (streaming)
 ├── utils.py           # Code block extraction
 └── agents/
     ├── writer.py      # Writer Agent — conversational code generation
@@ -89,19 +107,33 @@ src/
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DEEPSEEK_API_KEY` | — | **Required.** Your DeepSeek API key |
-| `DEEPSEEK_BASE_URL` | `https://api.deepseek.com/chat/completions` | API endpoint |
+| `DEEPSEEK_API_KEY` | — | **Required.** Your API key |
+| `DEEPSEEK_BASE_URL` | `https://api.deepseek.com/chat/completions` | Chat completions endpoint |
 | `DEEPSEEK_MODEL` | `deepseek-v4-pro` | Model name |
-| `MAX_ITERATIONS` | `3` | Max Writer-Tester correction rounds |
+| `MAX_ITERATIONS` | `3` | Max correction rounds per request |
+
+The variable names use `DEEPSEEK_` for historical reasons, but they accept any OpenAI-compatible API — just point `BASE_URL` and `MODEL` to your provider of choice.
+
+---
+
+## 🔌 Supported Backends · 支持的模型后端
+
+Any API that follows the OpenAI `/v1/chat/completions` format will work out of the box:
+
+| Provider | Example BASE_URL |
+|----------|-----------------|
+| DeepSeek | `https://api.deepseek.com/chat/completions` |
+| OpenAI | `https://api.openai.com/v1/chat/completions` |
+| Ollama (local) | `http://localhost:11434/v1/chat/completions` |
+| vLLM / TGI | `http://your-server:8000/v1/chat/completions` |
+| Any OpenAI-compatible proxy | Your custom URL |
 
 ---
 
 ## 🛡️ Security · 安全
 
-- `.env` is gitignored — your API key stays local.
-- Code execution uses an isolated namespace. Not for production use; consider sandboxing for public-facing deployments.
-- `.env` 已被 `.gitignore` 排除，密钥不会上传。
-- 代码执行使用隔离命名空间，原型验证可接受，生产环境建议更安全的沙箱方案。
+- `.env` is gitignored — your API key stays local. `.env` 已被 `.gitignore` 排除，密钥不会上传。
+- Code execution uses an isolated namespace. This is a prototype — consider sandboxing for production. 代码执行使用隔离命名空间，原型验证可接受，生产环境建议更安全的沙箱方案。
 
 ---
 

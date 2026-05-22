@@ -21,7 +21,7 @@ class Config:
     def validate(cls) -> bool:
         if not cls.DEEPSEEK_API_KEY or cls.DEEPSEEK_API_KEY == "your_api_key_here":
             print("[ERROR] DEEPSEEK_API_KEY 未配置。")
-            print("  方式1: 设置环境变量  $env:DEEPSEEK_API_KEY='sk-...'")
-            print("  方式2: 复制 .env.example 为 .env 并填入真实密钥")
+            print("  方式1: 设置环境变量  $env:DEEPSEEK_API_KEY='your-key'")
+            print("  方式2: 复制 .env.example 为 .env 并填入 API 密钥")
             return False
         return True
