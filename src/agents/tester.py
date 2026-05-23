@@ -46,41 +46,46 @@ class TesterAgent:
         return ""
 
     @staticmethod
-    def _generate_tests_fallback(code: str) -> str:
-        """LLM 不可用时的规则兜底：根据函数签名生成简单测试"""
-        import inspect
-        import io as _io
+    def _generate_tests_fallback(code: str, tmp_dir: str) -> str:
+        """LLM 不可用时的规则兜底：通过子进程导入模块推断参数个数"""
+        import inspect as _inspect
 
-        old_out = sys.stdout
-        namespace: dict = {}
+        probe_code = (
+            "import sys; sys.path.insert(0, '.')\n"
+            "from code import *\n"
+            "import inspect, json\n"
+            "funcs = {}\n"
+            "for name, obj in list(locals().items()):\n"
+            "    if callable(obj) and not name.startswith('_'):\n"
+            "        try:\n"
+            "            sig = inspect.signature(obj)\n"
+            "            funcs[name] = len(sig.parameters)\n"
+            "        except: pass\n"
+            "print(json.dumps(funcs))\n"
+        )
+        probe_path = os.path.join(tmp_dir, "_probe.py")
+        with open(probe_path, "w", encoding="utf-8") as f:
+            f.write(probe_code)
         try:
-            sys.stdout = _io.StringIO()
-            compiled = compile(code, "<fallback>", "exec")
-            exec(compiled, {"__builtins__": __builtins__}, namespace)
+            p = subprocess.run(
+                [sys.executable, probe_path],
+                capture_output=True, text=True,
+                timeout=Config.SANDBOX_TIMEOUT,
+                cwd=tmp_dir,
+            )
+            if p.returncode == 0 and p.stdout.strip():
+                import json as _json
+                funcs = _json.loads(p.stdout.strip())
+                for name, n in funcs.items():
+                    if n == 0:
+                        return f"print(repr({name}()))"
+                    if n == 1:
+                        return f"print(repr({name}(42)))"
+                    if n == 2:
+                        return f"print(repr({name}(1, 2)))"
+                    return f"print(repr({name}()))"
         except Exception:
-            return ""
-        finally:
-            sys.stdout = old_out
-
-        funcs = TesterAgent._find_functions(code)
-        for name in funcs:
-            func = namespace.get(name)
-            if not callable(func):
-                continue
-            try:
-                sig = inspect.signature(func)
-                n = len(sig.parameters)
-            except (ValueError, TypeError):
-                n = 0
-
-            if n == 0:
-                return f"print(repr({name}()))"
-            if n == 1:
-                return f"print(repr({name}(42)))"
-            if n == 2:
-                return f"print(repr({name}(1, 2)))"
-            return f"print(repr({name}()))"
-
+            pass
         return ""
 
     @staticmethod
@@ -123,11 +128,12 @@ class TesterAgent:
                     code, user_request
                 )
                 if not test_expr:
-                    test_expr = TesterAgent._generate_tests_fallback(code)
+                    test_expr = TesterAgent._generate_tests_fallback(
+                        code, tmp_dir
+                    )
                 if test_expr:
                     test_code = (
-                        f"import sys; sys.path.insert(0, '.')\n"
-                        f"from code import *\n"
+                        f"exec(open({code_path!r}, encoding='utf-8').read())\n"
                         f"{test_expr}\n"
                     )
                     test_path = os.path.join(tmp_dir, "_test.py")

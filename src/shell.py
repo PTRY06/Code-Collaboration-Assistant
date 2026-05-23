@@ -80,7 +80,7 @@ class Shell:
         Config.DEEPSEEK_MODEL = name
         try:
             from src.llm_client import call_llm
-            resp = call_llm("ping")
+            resp = call_llm("hi")
             if resp:
                 print(" OK")
                 return f"已切换模型为: {name}"

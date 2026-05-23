@@ -14,8 +14,8 @@ class Config:
     )
     DEEPSEEK_MODEL: str = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-pro")
     MAX_ITERATIONS: int = int(os.getenv("MAX_ITERATIONS", "3"))
-    TEMPERATURE: float = 0.2
-    TIMEOUT: int = 60
+    TEMPERATURE: float = float(os.getenv("TEMPERATURE", "0.2"))
+    TIMEOUT: int = int(os.getenv("TIMEOUT", "60"))
     MAX_RETRIES: int = int(os.getenv("MAX_RETRIES", "3"))
     RETRY_BACKOFF_FACTOR: float = float(
         os.getenv("RETRY_BACKOFF_FACTOR", "1.5")

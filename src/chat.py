@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+
+from src.config import Config
 
 SYSTEM_PROMPT = (
     "你是 CodeCollab，一个友好的 AI 编程伙伴。你可以用中文或英文与用户交流。\n"
@@ -34,14 +36,16 @@ class ChatMessage:
 class ChatSession:
     """管理多轮对话历史，自动裁剪超出上下文窗口的消息"""
 
-    MAX_TOKENS = 96000
-
     def __init__(self) -> None:
         self.messages: list[ChatMessage] = [
             ChatMessage(role="system", content=SYSTEM_PROMPT),
         ]
         self.last_code_blocks: list[str] = []
         self._trimmed_count: int = 0
+
+    @property
+    def max_tokens(self) -> int:
+        return Config.MAX_HISTORY_TOKENS
 
     # ── 消息操作 ──────────────────────────────
 
@@ -68,7 +72,7 @@ class ChatSession:
         始终保留系统提示词和最近两轮对话。
         """
         min_keep = 5  # system + 2 turns (user+assistant × 2)
-        while len(self.messages) > min_keep and self._total_tokens() > self.MAX_TOKENS:
+        while len(self.messages) > min_keep and self._total_tokens() > self.max_tokens:
             idx = 1  # 跳过 system prompt
             # 找到最早的非系统消息
             while idx < len(self.messages) and self.messages[idx].role == "system":
@@ -95,8 +99,8 @@ class ChatSession:
     def history_summary(self) -> str:
         lines = []
         for m in self.messages:
-            if m.role == "system" and "你是 CodeCollab" in m.content:
-                continue
+            if m is self.messages[0] and m.role == "system":
+                continue  # skip the main system prompt
             role_label = {
                 "user": "你",
                 "assistant": "CodeCollab",
@@ -106,7 +110,7 @@ class ChatSession:
             lines.append(f"  {role_label}: {preview}")
         total = self._total_tokens()
         lines.append(
-            f"  ── 估算 token: {total} / {self.MAX_TOKENS}"
+            f"  ── 估算 token: {total} / {self.max_tokens}"
         )
         return "\n".join(lines) if lines else "（空对话）"
 
