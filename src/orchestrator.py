@@ -7,6 +7,8 @@ from collections.abc import Callable
 
 from src.chat import ChatSession
 from src.config import Config
+
+MIN_ITERATIONS = 1
 from src.agents.writer import WriterAgent
 from src.agents.tester import TesterAgent
 
@@ -67,7 +69,8 @@ def run_writer_tester(
         if len(code_blocks) > 1:
             _status(f"--- 代码块 {idx}/{len(code_blocks)} ---")
 
-        for attempt in range(Config.MAX_ITERATIONS):
+        max_iter = max(MIN_ITERATIONS, Config.MAX_ITERATIONS)
+        for attempt in range(max_iter):
             total_attempts += 1
             _status(
                 f"[Tester] {'执行' if attempt == 0 else f'修正第{attempt}次'}..."
@@ -88,7 +91,7 @@ def run_writer_tester(
 
             _status(f"[FAIL] {msg}")
 
-            if attempt < Config.MAX_ITERATIONS - 1:
+            if attempt < max_iter - 1:
                 _status("[Writer] 正在修正...")
                 response = WriterAgent.retry_with_error(
                     chat, code, msg, on_token=_token
@@ -101,7 +104,7 @@ def run_writer_tester(
             else:
                 _status(
                     f"[STOP] 已达最大修正轮数"
-                    f" ({Config.MAX_ITERATIONS})，放弃此代码块。"
+                    f" ({max_iter})，放弃此代码块。"
                 )
 
     all_passed = len(passed_blocks) == len(code_blocks)

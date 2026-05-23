@@ -62,19 +62,17 @@ class ChatSession:
 
     @staticmethod
     def _estimate_tokens(text: str) -> int:
-        return max(1, len(text) // 3)
+        cjk = sum(1 for c in text if "\u4e00" <= c <= "\u9fff")
+        other = len(text) - cjk
+        return max(1, cjk + other // 3)
 
     def _total_tokens(self) -> int:
         return sum(self._estimate_tokens(m.content) for m in self.messages)
 
     def _trim(self) -> None:
-        """裁剪最旧的非系统消息，直到总 token 数低于上限。
-        始终保留系统提示词和最近两轮对话。
-        """
-        min_keep = 5  # system + 2 turns (user+assistant × 2)
+        min_keep = 5
         while len(self.messages) > min_keep and self._total_tokens() > self.max_tokens:
-            idx = 1  # 跳过 system prompt
-            # 找到最早的非系统消息
+            idx = 1
             while idx < len(self.messages) and self.messages[idx].role == "system":
                 idx += 1
             if idx >= len(self.messages) - 4:
@@ -82,13 +80,11 @@ class ChatSession:
             removed = self.messages.pop(idx)
             self._trimmed_count += 1
             if self._trimmed_count == 1:
-                self.messages.insert(
-                    1,
-                    ChatMessage(
-                        role="system",
-                        content="[较早的对话已自动省略以节省上下文]",
-                    ),
+                marker = ChatMessage(
+                    role="system",
+                    content="[较早的对话已自动省略以节省上下文]",
                 )
+                self.messages.insert(1, marker)
 
     def to_api_messages(self) -> list[dict]:
         self._trim()

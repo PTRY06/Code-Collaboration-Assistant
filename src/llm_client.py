@@ -113,7 +113,7 @@ def call_llm(prompt: str) -> str:
         response.raise_for_status()
         return response.json()["choices"][0]["message"]["content"].strip()
     except Exception as e:
-        _handle_request_error(e)
+        _handle_request_error(e, response)
         return ""
 
 
@@ -166,4 +166,4 @@ def call_llm_stream_chat(
                 continue
 
     except Exception as e:
-        _handle_request_error(e)
+        _handle_request_error(e, response)  # type: ignore[possibly-unbound]

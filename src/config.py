@@ -6,6 +6,20 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def _int_env(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)))
+    except (ValueError, TypeError):
+        return default
+
+
+def _float_env(name: str, default: float) -> float:
+    try:
+        return float(os.getenv(name, str(default)))
+    except (ValueError, TypeError):
+        return default
+
+
 class Config:
     DEEPSEEK_API_KEY: str = os.getenv("DEEPSEEK_API_KEY", "")
     DEEPSEEK_BASE_URL: str = os.getenv(
@@ -13,15 +27,15 @@ class Config:
         "https://api.deepseek.com/chat/completions",
     )
     DEEPSEEK_MODEL: str = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-pro")
-    MAX_ITERATIONS: int = int(os.getenv("MAX_ITERATIONS", "3"))
-    TEMPERATURE: float = float(os.getenv("TEMPERATURE", "0.2"))
-    TIMEOUT: int = int(os.getenv("TIMEOUT", "60"))
-    MAX_RETRIES: int = int(os.getenv("MAX_RETRIES", "3"))
-    RETRY_BACKOFF_FACTOR: float = float(
-        os.getenv("RETRY_BACKOFF_FACTOR", "1.5")
+    MAX_ITERATIONS: int = _int_env("MAX_ITERATIONS", 3)
+    TEMPERATURE: float = _float_env("TEMPERATURE", 0.2)
+    TIMEOUT: int = _int_env("TIMEOUT", 60)
+    MAX_RETRIES: int = _int_env("MAX_RETRIES", 3)
+    RETRY_BACKOFF_FACTOR: float = _float_env(
+        "RETRY_BACKOFF_FACTOR", 1.5
     )
-    SANDBOX_TIMEOUT: int = int(os.getenv("SANDBOX_TIMEOUT", "10"))
-    MAX_HISTORY_TOKENS: int = int(os.getenv("MAX_HISTORY_TOKENS", "96000"))
+    SANDBOX_TIMEOUT: int = _int_env("SANDBOX_TIMEOUT", 10)
+    MAX_HISTORY_TOKENS: int = _int_env("MAX_HISTORY_TOKENS", 96000)
 
     @classmethod
     def validate(cls) -> bool:
