@@ -62,6 +62,8 @@ MAX_ITERATIONS=3
 MAX_RETRIES=3
 SANDBOX_TIMEOUT=10
 MAX_HISTORY_TOKENS=96000
+TEMPERATURE=0.2
+TIMEOUT=60
 ```
 
 Despite the `DEEPSEEK_` prefix, the client follows the standard OpenAI chat completions format — any compatible endpoint works. 变量名虽含 `DEEPSEEK_`，但客户端遵循标准 OpenAI 格式，任何兼容端点均可使用。
@@ -69,10 +71,24 @@ Despite the `DEEPSEEK_` prefix, the client follows the standard OpenAI chat comp
 ### 3. Run · 运行
 
 ```bash
-python -m src.main                  # Interactive mode · 交互模式
-python -m src.main -r "write a prime checker"
-python -m src.main -r "写一个判断质数的函数" -q
-python -m src.main -b requests.txt  # Batch mode · 批量模式
+# Interactive REPL with slash commands · 交互式 REPL
+python -m src.main
+
+# Single request — generates, tests, and auto-fixes · 单次请求
+python -m src.main -r "write a function to check if a number is prime"
+python -m src.main -r "写一个函数反转字符串" -q
+
+# Batch test from file · 从文件批量测试
+python -m src.main -b examples.txt -o results.json
+```
+
+Example batch file (`examples.txt`) · 示例批量文件：
+
+```
+write a function to remove duplicates from a list
+generate a Fibonacci sequence up to n terms
+写一个函数判断回文字符串
+create a function that sorts a list of dictionaries by a given key
 ```
 
 ---
@@ -122,6 +138,8 @@ src/
 | `RETRY_BACKOFF_FACTOR` | `1.5` | Exponential backoff multiplier · 指数退避因子 |
 | `SANDBOX_TIMEOUT` | `10` | Code execution timeout (seconds) · 代码执行超时（秒） |
 | `MAX_HISTORY_TOKENS` | `96000` | Auto-trim threshold for chat history · 对话历史自动裁剪阈值 |
+| `TEMPERATURE` | `0.2` | LLM sampling temperature · 模型采样温度 |
+| `TIMEOUT` | `60` | API request timeout (seconds) · API 请求超时（秒） |
 
 The variable names use `DEEPSEEK_` for historical reasons, but they accept any OpenAI-compatible API — just point `BASE_URL` and `MODEL` to your provider of choice. 变量名中 `DEEPSEEK_` 仅为历史遗留，可替换为任意 OpenAI 兼容 API。
 
